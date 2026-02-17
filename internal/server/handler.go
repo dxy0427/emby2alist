@@ -34,9 +34,19 @@ func NewServer(cfg *config.Config) *Server {
 }
 
 func (s *Server) reloadClients() {
-	s.mediaServer = mediaserver.NewClient(s.cfg.BackendType, s.cfg.EmbyHost, s.cfg.EmbyApiKey)
+	embyHost := s.cfg.EmbyHost
+	if !strings.HasPrefix(embyHost, "http://") && !strings.HasPrefix(embyHost, "https://") {
+		embyHost = "http://" + embyHost
+	}
+
+	alistHost := s.cfg.AlistHost
+	if !strings.HasPrefix(alistHost, "http://") && !strings.HasPrefix(alistHost, "https://") {
+		alistHost = "http://" + alistHost
+	}
+
+	s.mediaServer = mediaserver.NewClient(s.cfg.BackendType, embyHost, s.cfg.EmbyApiKey)
 	s.alist = alist.NewClient(
-		s.cfg.AlistHost,
+		alistHost,
 		s.cfg.AlistToken,
 		s.cfg.AlistPublicHost,
 		s.cfg.AlistSignEnable,
@@ -45,12 +55,9 @@ func (s *Server) reloadClients() {
 }
 
 func (s *Server) setupRoutes() {
-	// Web UI
 	s.engine.GET("/admin", web.AdminPage)
 	s.engine.GET("/api/config", s.getConfig)
 	s.engine.POST("/api/config", s.updateConfig)
-
-	// 通用代理
 	s.engine.NoRoute(s.mainHandler)
 }
 
@@ -59,7 +66,7 @@ func (s *Server) Run(addr string) error {
 }
 
 func (s *Server) mainHandler(c *gin.Context) {
-	// 1. PlaybackInfo 拦截 (ModifyResponse)
+	// 1. PlaybackInfo 拦截
 	if strings.Contains(c.Request.URL.Path, "/PlaybackInfo") {
 		logrus.Infof("拦截 PlaybackInfo: %s", c.ClientIP())
 		s.ReverseProxy(c, true)
@@ -67,12 +74,9 @@ func (s *Server) mainHandler(c *gin.Context) {
 	}
 
 	// 2. 识别流媒体请求
-	// Emby: /emby/videos/{Id}/stream
-	// Jellyfin: /videos/{Id}/stream
-	// Download: /Items/{Id}/Download
 	path := c.Request.URL.Path
 	isStream := strings.Contains(path, "/stream") || strings.Contains(path, "/Download") || strings.Contains(path, "/original")
-	
+
 	if !isStream {
 		s.ReverseProxy(c, false)
 		return
@@ -81,11 +85,13 @@ func (s *Server) mainHandler(c *gin.Context) {
 	// 3. 提取 ItemID
 	itemId := extractItemId(path)
 	mediaSourceId := c.Query("MediaSourceId")
-	if mediaSourceId == "" { mediaSourceId = c.Query("mediaSourceId") }
+	if mediaSourceId == "" {
+		mediaSourceId = c.Query("mediaSourceId")
+	}
 
 	logrus.Infof("播放请求: ItemID=%s SourceID=%s", itemId, mediaSourceId)
 
-	// 获取真实路径
+	// 获取真实路径 (原始路径，用于挂载检测)
 	realPath, _, err := s.mediaServer.GetItemInfo(itemId, mediaSourceId)
 	if err != nil {
 		logrus.Errorf("获取路径失败: %v, 回源代理", err)
@@ -93,7 +99,19 @@ func (s *Server) mainHandler(c *gin.Context) {
 		return
 	}
 
-	// 4. 规则引擎
+	// ==========================================
+	// 4. 生成目标路径 (用于 Alist 请求和 Strm 跳转)
+	// ==========================================
+	// 我们操作 targetPath，保持 realPath 不变，这样就不会影响挂载检测了
+	targetPath := realPath
+	for _, mapping := range s.cfg.PathMappings {
+		if mapping.Old != "" {
+			targetPath = strings.Replace(targetPath, mapping.Old, mapping.New, 1)
+		}
+	}
+	targetPath = strings.ReplaceAll(targetPath, "\\", "/")
+
+	// 5. 规则引擎 (基于原始路径判断)
 	ctx := map[string]interface{}{
 		"uri":         c.Request.RequestURI,
 		"remote_addr": c.ClientIP(),
@@ -101,7 +119,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 		"filePath":    realPath,
 		"userId":      c.Query("UserId"),
 	}
-	
+
 	matched, mode := MatchMode(s.cfg.RouteRules, ctx)
 	if matched {
 		logrus.Infof("规则命中: Mode=%s", mode)
@@ -115,14 +133,16 @@ func (s *Server) mainHandler(c *gin.Context) {
 		}
 	}
 
-	// 5. Strm 文件 (Http 链接) 直接跳转
-	if strings.HasPrefix(realPath, "http") {
-		logrus.Infof("Strm直连: %s", realPath)
-		c.Redirect(http.StatusFound, realPath)
+	// 6. Strm 文件 (Http 链接) 直接跳转
+	// 这里检查 targetPath (已经被映射过的路径)
+	if strings.HasPrefix(targetPath, "http") {
+		logrus.Infof("Strm直连跳转: %s", targetPath)
+		c.Redirect(http.StatusFound, targetPath)
 		return
 	}
 
-	// 6. 本地文件处理 (挂载检测)
+	// 7. 本地文件处理 (挂载检测)
+	// 这里必须检查 realPath (Emby 里的原始路径)，否则映射后会导致这里匹配失败
 	isMounted := false
 	for _, mnt := range s.cfg.MountPaths {
 		if strings.HasPrefix(realPath, mnt) {
@@ -130,24 +150,15 @@ func (s *Server) mainHandler(c *gin.Context) {
 			break
 		}
 	}
-	
+
 	if !isMounted {
 		logrus.Debugf("非挂载路径: %s, 回源代理", realPath)
 		s.ReverseProxy(c, false)
 		return
 	}
 
-	// 7. 路径映射
-	alistPath := realPath
-	for _, mapping := range s.cfg.PathMappings {
-		if mapping.Old != "" {
-			alistPath = strings.Replace(alistPath, mapping.Old, mapping.New, 1)
-		}
-	}
-	alistPath = strings.ReplaceAll(alistPath, "\\", "/")
-
-	// 8. 请求 Alist
-	rawUrl, err := s.alist.GetFsGet(alistPath)
+	// 8. 请求 Alist (使用 targetPath)
+	rawUrl, err := s.alist.GetFsGet(targetPath)
 	if err != nil {
 		logrus.Warnf("Alist 获取失败: %v, 回源代理", err)
 		s.ReverseProxy(c, false)
@@ -167,7 +178,6 @@ func extractItemId(path string) string {
 	return ""
 }
 
-// 配置 API
 func (s *Server) getConfig(c *gin.Context) {
 	c.JSON(200, s.cfg)
 }
@@ -177,7 +187,7 @@ func (s *Server) updateConfig(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	newCfg.ServerPort = s.cfg.ServerPort // 保护端口不被修改
+	newCfg.ServerPort = s.cfg.ServerPort
 	s.cfg.Update(&newCfg)
 	s.cfg.Save("config.yaml")
 	s.reloadClients()
