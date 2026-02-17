@@ -5,12 +5,10 @@ import (
 	"strings"
 )
 
-// MediaServerClient 定义 Emby 和 Jellyfin 的通用接口
 type MediaServerClient interface {
 	GetItemInfo(itemId string, mediaSourceId string) (string, *ItemInfo, error)
 }
 
-// ItemInfo 通用信息结构
 type ItemInfo struct {
 	Name         string
 	Path         string
@@ -23,7 +21,6 @@ type MediaSource struct {
 	Protocol string
 }
 
-// NewClient 工厂函数
 func NewClient(backendType, host, apiKey string) MediaServerClient {
 	bt := strings.ToLower(backendType)
 	if bt == "jellyfin" {
@@ -32,7 +29,6 @@ func NewClient(backendType, host, apiKey string) MediaServerClient {
 	return NewEmbyClient(host, apiKey)
 }
 
-// 通用 JSON 结构，用于解析 Emby/Jellyfin 响应
 type commonItemsResponse struct {
 	Items []struct {
 		Name         string        `json:"Name"`
@@ -41,7 +37,6 @@ type commonItemsResponse struct {
 	} `json:"Items"`
 }
 
-// commonGetItemPath 提取通用逻辑
 func commonGetItemPath(res commonItemsResponse, mediaSourceId string) (string, *ItemInfo, error) {
 	if len(res.Items) == 0 {
 		return "", nil, fmt.Errorf("item not found")
