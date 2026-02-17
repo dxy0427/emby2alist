@@ -22,7 +22,7 @@ func main() {
 	cfgPath := "config.yaml"
 	cfg, err := config.LoadConfig(cfgPath)
 	if err != nil {
-		logrus.Warnf("加载配置失败，使用默认配置: %v", err)
+		logrus.Warnf("加载配置失败，将生成默认配置: %v", err)
 		cfg = config.DefaultConfig()
 		_ = cfg.Save(cfgPath)
 	}
@@ -34,14 +34,19 @@ func main() {
 	srv := server.NewServer(cfg)
 
 	logrus.Info("=======================================")
-	logrus.Info("      Emby2Alist Go (完整重构版)      ")
-	logrus.Infof(" 服务端口: %d", cfg.ServerPort)
-	logrus.Infof(" 管理后台: http://localhost:%d/admin", cfg.ServerPort)
-	logrus.Infof(" 后端模式: %s", cfg.BackendType)
+	logrus.Info("      Emby2Alist Go (精简重构版)      ")
+	logrus.Infof(" 服务端口: %d", cfg.Port)
+	logrus.Infof(" 媒体服务器: %s (%s)", cfg.Server.Addr, cfg.Server.Type)
+	if cfg.HttpStrm.Enable {
+		logrus.Infof(" HTTP Strm: 启用 (解析真实链接: %v)", cfg.HttpStrm.ResolveStrmLinks)
+	}
+	if cfg.AlistStrm.Enable {
+		logrus.Infof(" Alist Strm: 启用 (对接: %s)", cfg.AlistStrm.AlistHost)
+	}
 	logrus.Info("=======================================")
 
 	// 启动 HTTP 服务
-	if err := srv.Run(fmt.Sprintf(":%d", cfg.ServerPort)); err != nil {
+	if err := srv.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {
 		logrus.Fatalf("服务启动失败: %v", err)
 	}
 }
