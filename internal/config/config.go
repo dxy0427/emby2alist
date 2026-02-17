@@ -20,14 +20,15 @@ type Config struct {
 	RouteRules       []RouteRule   `yaml:"route_rules" json:"route_rules"`
 	PathMappings     []PathMapping `yaml:"path_mappings" json:"path_mappings"`
 	DisableTranscode bool          `yaml:"disable_transcode" json:"disable_transcode"`
+	ResolveStrmLinks bool          `yaml:"resolve_strm_links" json:"resolve_strm_links"` // 新增：是否解析 Strm 302
 	mu               sync.RWMutex  `yaml:"-" json:"-"`
 }
 
 type RouteRule struct {
-	Group   string `yaml:"group" json:"group"`     // 分组逻辑
-	Mode    string `yaml:"mode" json:"mode"`       // proxy, redirect, block
-	Target  string `yaml:"target" json:"target"`   // filePath, alistRes, remote_addr, ua, userId
-	Matcher string `yaml:"matcher" json:"matcher"` // contains, startsWith, endsWith, regex, eq
+	Group   string `yaml:"group" json:"group"`
+	Mode    string `yaml:"mode" json:"mode"`
+	Target  string `yaml:"target" json:"target"`
+	Matcher string `yaml:"matcher" json:"matcher"`
 	Value   string `yaml:"value" json:"value"`
 }
 
@@ -48,6 +49,7 @@ func DefaultConfig() *Config {
 		AlistSignEnable:  false,
 		MountPaths:       []string{"/mnt"},
 		DisableTranscode: true,
+		ResolveStrmLinks: false, // 默认关闭
 		RouteRules:       []RouteRule{},
 		PathMappings:     []PathMapping{},
 	}
@@ -85,7 +87,6 @@ func (c *Config) Update(newCfg *Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 手动赋值所有字段，避免覆盖锁
 	c.ServerPort = newCfg.ServerPort
 	c.BackendType = newCfg.BackendType
 	c.EmbyHost = newCfg.EmbyHost
@@ -99,4 +100,5 @@ func (c *Config) Update(newCfg *Config) {
 	c.RouteRules = newCfg.RouteRules
 	c.PathMappings = newCfg.PathMappings
 	c.DisableTranscode = newCfg.DisableTranscode
+	c.ResolveStrmLinks = newCfg.ResolveStrmLinks
 }
