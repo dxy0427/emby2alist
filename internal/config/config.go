@@ -84,5 +84,19 @@ func (c *Config) Save(path string) error {
 func (c *Config) Update(newCfg *Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	*c = *newCfg
+
+	// 手动赋值所有字段
+	c.ServerPort = newCfg.ServerPort
+	c.BackendType = newCfg.BackendType
+	c.EmbyHost = newCfg.EmbyHost
+	c.EmbyApiKey = newCfg.EmbyApiKey
+	c.AlistHost = newCfg.AlistHost
+	c.AlistPublicHost = newCfg.AlistPublicHost
+	c.AlistToken = newCfg.AlistToken
+	c.AlistSignEnable = newCfg.AlistSignEnable
+	c.AlistSignSalt = newCfg.AlistSignSalt
+	c.MountPaths = newCfg.MountPaths
+	c.RouteRules = newCfg.RouteRules
+	c.PathMappings = newCfg.PathMappings
+	c.DisableTranscode = newCfg.DisableTranscode
 }
