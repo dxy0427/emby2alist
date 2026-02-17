@@ -5,7 +5,6 @@ import (
 	"emby2alist/internal/pkg/alist"
 	"emby2alist/internal/pkg/mediaserver"
 	"emby2alist/internal/web"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
