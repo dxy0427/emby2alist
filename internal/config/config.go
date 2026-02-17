@@ -7,30 +7,35 @@ import (
 )
 
 type Config struct {
-	ServerPort       int           `yaml:"server_port" json:"server_port"`
-	BackendType      string        `yaml:"backend_type" json:"backend_type"`
-	EmbyHost         string        `yaml:"emby_host" json:"emby_host"`
-	EmbyApiKey       string        `yaml:"emby_api_key" json:"emby_api_key"`
-	AlistHost        string        `yaml:"alist_host" json:"alist_host"`
-	AlistPublicHost  string        `yaml:"alist_public_host" json:"alist_public_host"`
-	AlistToken       string        `yaml:"alist_token" json:"alist_token"`
-	AlistSignEnable  bool          `yaml:"alist_sign_enable" json:"alist_sign_enable"`
-	AlistSignSalt    string        `yaml:"alist_sign_salt" json:"alist_sign_salt"`
-	AlistUaPassthrough bool        `yaml:"alist_ua_passthrough" json:"alist_ua_passthrough"` // 新增：UA透传
-	MountPaths       []string      `yaml:"mount_paths" json:"mount_paths"`
-	RouteRules       []RouteRule   `yaml:"route_rules" json:"route_rules"`
-	PathMappings     []PathMapping `yaml:"path_mappings" json:"path_mappings"`
-	DisableTranscode bool          `yaml:"disable_transcode" json:"disable_transcode"`
-	ResolveStrmLinks bool          `yaml:"resolve_strm_links" json:"resolve_strm_links"`
-	mu               sync.RWMutex  `yaml:"-" json:"-"`
+	Port         int              `yaml:"port" json:"port"`
+	Server       ServerConfig     `yaml:"server" json:"server"`
+	HttpStrm     HttpStrmConfig   `yaml:"http_strm" json:"http_strm"`
+	PathMappings []PathMapping    `yaml:"path_mappings" json:"path_mappings"` // 全局/HTTP地址替换
+	AlistStrm    AlistStrmConfig  `yaml:"alist_strm" json:"alist_strm"`
+	mu           sync.RWMutex     `yaml:"-" json:"-"`
 }
 
-type RouteRule struct {
-	Group   string `yaml:"group" json:"group"`
-	Mode    string `yaml:"mode" json:"mode"`
-	Target  string `yaml:"target" json:"target"`
-	Matcher string `yaml:"matcher" json:"matcher"`
-	Value   string `yaml:"value" json:"value"`
+type ServerConfig struct {
+	Type string `yaml:"type" json:"type"` // Emby / Jellyfin
+	Addr string `yaml:"addr" json:"addr"`
+	Auth string `yaml:"auth" json:"auth"` // ApiKey
+}
+
+type HttpStrmConfig struct {
+	Enable            bool `yaml:"enable" json:"enable"`
+	DisableTranscode  bool `yaml:"disable_transcode" json:"disable_transcode"`
+	ResolveStrmLinks  bool `yaml:"resolve_strm_links" json:"resolve_strm_links"`
+	AlistUaPassthrough bool `yaml:"alist_ua_passthrough" json:"alist_ua_passthrough"`
+}
+
+type AlistStrmConfig struct {
+	Enable            bool          `yaml:"enable" json:"enable"`
+	DisableTranscode  bool          `yaml:"disable_transcode" json:"disable_transcode"`
+	AlistHost         string        `yaml:"alist_host" json:"alist_host"`
+	AlistPublicHost   string        `yaml:"alist_public_host" json:"alist_public_host"`
+	AlistToken        string        `yaml:"alist_token" json:"alist_token"`
+	AlistUaPassthrough bool         `yaml:"alist_ua_passthrough" json:"alist_ua_passthrough"`
+	PathMappings      []PathMapping `yaml:"path_mappings" json:"path_mappings"` // Alist 专用路径映射
 }
 
 type PathMapping struct {
@@ -40,20 +45,28 @@ type PathMapping struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		ServerPort:       8091,
-		BackendType:      "emby",
-		EmbyHost:         "http://172.17.0.1:8096",
-		EmbyApiKey:       "",
-		AlistHost:        "http://172.17.0.1:5244",
-		AlistPublicHost:  "",
-		AlistToken:       "",
-		AlistSignEnable:  false,
-		AlistUaPassthrough: false, // 默认关闭
-		MountPaths:       []string{"/mnt"},
-		DisableTranscode: true,
-		ResolveStrmLinks: false,
-		RouteRules:       []RouteRule{},
-		PathMappings:     []PathMapping{},
+		Port: 9000,
+		Server: ServerConfig{
+			Type: "Emby",
+			Addr: "http://localhost:8096",
+			Auth: "",
+		},
+		HttpStrm: HttpStrmConfig{
+			Enable:            true,
+			DisableTranscode:  true,
+			ResolveStrmLinks:  true,
+			AlistUaPassthrough: false,
+		},
+		PathMappings: []PathMapping{},
+		AlistStrm: AlistStrmConfig{
+			Enable:            true,
+			DisableTranscode:  true,
+			AlistHost:         "http://172.17.0.1:5244",
+			AlistPublicHost:   "",
+			AlistToken:        "",
+			AlistUaPassthrough: false,
+			PathMappings:      []PathMapping{},
+		},
 	}
 }
 
@@ -66,11 +79,11 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-	if cfg.ServerPort == 0 {
-		cfg.ServerPort = 8091
+	if cfg.Port == 0 {
+		cfg.Port = 9000
 	}
-	if cfg.BackendType == "" {
-		cfg.BackendType = "emby"
+	if cfg.Server.Type == "" {
+		cfg.Server.Type = "Emby"
 	}
 	return &cfg, nil
 }
@@ -83,25 +96,4 @@ func (c *Config) Save(path string) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
-}
-
-func (c *Config) Update(newCfg *Config) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.ServerPort = newCfg.ServerPort
-	c.BackendType = newCfg.BackendType
-	c.EmbyHost = newCfg.EmbyHost
-	c.EmbyApiKey = newCfg.EmbyApiKey
-	c.AlistHost = newCfg.AlistHost
-	c.AlistPublicHost = newCfg.AlistPublicHost
-	c.AlistToken = newCfg.AlistToken
-	c.AlistSignEnable = newCfg.AlistSignEnable
-	c.AlistSignSalt = newCfg.AlistSignSalt
-	c.AlistUaPassthrough = newCfg.AlistUaPassthrough // 更新
-	c.MountPaths = newCfg.MountPaths
-	c.RouteRules = newCfg.RouteRules
-	c.PathMappings = newCfg.PathMappings
-	c.DisableTranscode = newCfg.DisableTranscode
-	c.ResolveStrmLinks = newCfg.ResolveStrmLinks
 }
