@@ -7,33 +7,33 @@ import (
 )
 
 type Config struct {
-	ServerPort       int           `yaml:"server_port"`
-	BackendType      string        `yaml:"backend_type"` // emby 或 jellyfin
-	EmbyHost         string        `yaml:"emby_host"`
-	EmbyApiKey       string        `yaml:"emby_api_key"`
-	AlistHost        string        `yaml:"alist_host"`
-	AlistPublicHost  string        `yaml:"alist_public_host"`
-	AlistToken       string        `yaml:"alist_token"`
-	AlistSignEnable  bool          `yaml:"alist_sign_enable"`
-	AlistSignSalt    string        `yaml:"alist_sign_salt"`
-	MountPaths       []string      `yaml:"mount_paths"`
-	RouteRules       []RouteRule   `yaml:"route_rules"`
-	PathMappings     []PathMapping `yaml:"path_mappings"`
-	DisableTranscode bool          `yaml:"disable_transcode"`
-	mu               sync.RWMutex  `yaml:"-"`
+	ServerPort       int           `yaml:"server_port" json:"server_port"`
+	BackendType      string        `yaml:"backend_type" json:"backend_type"` // emby 或 jellyfin
+	EmbyHost         string        `yaml:"emby_host" json:"emby_host"`
+	EmbyApiKey       string        `yaml:"emby_api_key" json:"emby_api_key"`
+	AlistHost        string        `yaml:"alist_host" json:"alist_host"`
+	AlistPublicHost  string        `yaml:"alist_public_host" json:"alist_public_host"`
+	AlistToken       string        `yaml:"alist_token" json:"alist_token"`
+	AlistSignEnable  bool          `yaml:"alist_sign_enable" json:"alist_sign_enable"`
+	AlistSignSalt    string        `yaml:"alist_sign_salt" json:"alist_sign_salt"`
+	MountPaths       []string      `yaml:"mount_paths" json:"mount_paths"`
+	RouteRules       []RouteRule   `yaml:"route_rules" json:"route_rules"`
+	PathMappings     []PathMapping `yaml:"path_mappings" json:"path_mappings"`
+	DisableTranscode bool          `yaml:"disable_transcode" json:"disable_transcode"`
+	mu               sync.RWMutex  `yaml:"-" json:"-"`
 }
 
 type RouteRule struct {
-	Group   string `yaml:"group"`   // 分组逻辑
-	Mode    string `yaml:"mode"`    // proxy, redirect, block
-	Target  string `yaml:"target"`  // filePath, alistRes, remote_addr, ua, userId
-	Matcher string `yaml:"matcher"` // contains, startsWith, endsWith, regex, eq
-	Value   string `yaml:"value"`
+	Group   string `yaml:"group" json:"group"`     // 分组逻辑
+	Mode    string `yaml:"mode" json:"mode"`       // proxy, redirect, block
+	Target  string `yaml:"target" json:"target"`   // filePath, alistRes, remote_addr, ua, userId
+	Matcher string `yaml:"matcher" json:"matcher"` // contains, startsWith, endsWith, regex, eq
+	Value   string `yaml:"value" json:"value"`
 }
 
 type PathMapping struct {
-	Old string `yaml:"old"`
-	New string `yaml:"new"`
+	Old string `yaml:"old" json:"old"`
+	New string `yaml:"new" json:"new"`
 }
 
 func DefaultConfig() *Config {
@@ -85,7 +85,7 @@ func (c *Config) Update(newCfg *Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 手动赋值所有字段
+	// 手动赋值所有字段，避免覆盖锁
 	c.ServerPort = newCfg.ServerPort
 	c.BackendType = newCfg.BackendType
 	c.EmbyHost = newCfg.EmbyHost
