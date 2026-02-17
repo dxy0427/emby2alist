@@ -1,17 +1,11 @@
-version: '3.8'
 services:
   emby2alist:
     build: .
     image: emby2alist:latest
     container_name: emby2alist
     restart: unless-stopped
-    # 推荐使用 host 模式，方便直连宿主机 Emby
     network_mode: host
     environment:
       - TZ=Asia/Shanghai
     volumes:
-      # 配置文件挂载
       - ./config.yaml:/app/config.yaml
-    # 如果不使用 host 模式，取消下面的注释并注释 network_mode
-    # ports:
-    #   - "8091:8091"
