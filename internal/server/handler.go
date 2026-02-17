@@ -20,6 +20,7 @@ type Server struct {
 	mediaServer mediaserver.MediaServerClient
 	alist       *alist.Client
 	cache       *cache.Cache
+	httpClient  *http.Client // 专用 HTTP Client
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -27,6 +28,13 @@ func NewServer(cfg *config.Config) *Server {
 		engine: gin.Default(),
 		cfg:    cfg,
 		cache:  cache.New(10*time.Minute, 20*time.Minute),
+		// 创建一个不自动跟随跳转的 Client，专门用来获取 302 Location
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse // 遇到跳转时停止，返回 Response
+			},
+		},
 	}
 	s.reloadClients()
 	s.setupRoutes()
@@ -91,7 +99,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 
 	logrus.Infof("播放请求: ItemID=%s SourceID=%s", itemId, mediaSourceId)
 
-	// 获取真实路径 (原始路径，用于挂载检测)
+	// 获取真实路径 (原始路径)
 	realPath, _, err := s.mediaServer.GetItemInfo(itemId, mediaSourceId)
 	if err != nil {
 		logrus.Errorf("获取路径失败: %v, 回源代理", err)
@@ -99,10 +107,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 		return
 	}
 
-	// ==========================================
-	// 4. 生成目标路径 (用于 Alist 请求和 Strm 跳转)
-	// ==========================================
-	// 我们操作 targetPath，保持 realPath 不变，这样就不会影响挂载检测了
+	// 4. 路径映射 (手动修复逻辑保留，优先级高)
 	targetPath := realPath
 	for _, mapping := range s.cfg.PathMappings {
 		if mapping.Old != "" {
@@ -111,7 +116,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 	}
 	targetPath = strings.ReplaceAll(targetPath, "\\", "/")
 
-	// 5. 规则引擎 (基于原始路径判断)
+	// 5. 规则引擎
 	ctx := map[string]interface{}{
 		"uri":         c.Request.RequestURI,
 		"remote_addr": c.ClientIP(),
@@ -133,16 +138,44 @@ func (s *Server) mainHandler(c *gin.Context) {
 		}
 	}
 
-	// 6. Strm 文件 (Http 链接) 直接跳转
-	// 这里检查 targetPath (已经被映射过的路径)
+	// ==========================================
+	// 6. Strm 文件 (Http 链接) 处理核心逻辑
+	// ==========================================
 	if strings.HasPrefix(targetPath, "http") {
+		// 检查是否开启了“解析 Strm 重定向”功能
+		if s.cfg.ResolveStrmLinks {
+			logrus.Infof("正在解析 Strm 链接: %s", targetPath)
+			
+			// 发起请求，不跟随跳转
+			req, _ := http.NewRequest("GET", targetPath, nil)
+			// 可选：伪装 UA 防止被拒绝
+			req.Header.Set("User-Agent", "Mozilla/5.0")
+			
+			resp, err := s.httpClient.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				// 如果状态码是 3xx，获取 Location
+				if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+					location := resp.Header.Get("Location")
+					if location != "" {
+						logrus.Infof("解析成功! 真实地址: %s", location)
+						targetPath = location
+					}
+				} else if resp.StatusCode == 200 {
+					// 某些情况下虽然没跳，但我们可能就想用这个链接（如 Alist 直链）
+					// 这里不做额外处理，直接用原始链接
+				}
+			} else {
+				logrus.Warnf("解析 Strm 链接失败: %v, 将使用原始链接", err)
+			}
+		}
+
 		logrus.Infof("Strm直连跳转: %s", targetPath)
 		c.Redirect(http.StatusFound, targetPath)
 		return
 	}
 
 	// 7. 本地文件处理 (挂载检测)
-	// 这里必须检查 realPath (Emby 里的原始路径)，否则映射后会导致这里匹配失败
 	isMounted := false
 	for _, mnt := range s.cfg.MountPaths {
 		if strings.HasPrefix(realPath, mnt) {
@@ -157,7 +190,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 		return
 	}
 
-	// 8. 请求 Alist (使用 targetPath)
+	// 8. 请求 Alist
 	rawUrl, err := s.alist.GetFsGet(targetPath)
 	if err != nil {
 		logrus.Warnf("Alist 获取失败: %v, 回源代理", err)
