@@ -43,11 +43,6 @@ if !strings.HasPrefix(embyHost, "http://") && !strings.HasPrefix(embyHost, "http
 embyHost = "http://" + embyHost
 }
 
-code
-Code
-download
-content_copy
-expand_less
 s.mediaServer = mediaserver.NewClient(s.cfg.Server.Type, embyHost, s.cfg.Server.Auth)
 
 alistHost := s.cfg.AlistStrm.AlistHost
@@ -81,11 +76,6 @@ s.ReverseProxy(c, true)
 return
 }
 
-code
-Code
-download
-content_copy
-expand_less
 path := c.Request.URL.Path
 isStream := strings.Contains(path, "/stream") || strings.Contains(path, "/Download") || strings.Contains(path, "/original")
 
