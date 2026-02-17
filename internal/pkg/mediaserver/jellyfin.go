@@ -30,9 +30,8 @@ func (j *JellyfinClient) GetItemInfo(itemId string, mediaSourceId string) (strin
 		SetQueryParam("Limit", "1")
 
 	if j.apiKey != "" {
-		// Jellyfin 推荐 Header，但也支持 Query Param
 		req.SetHeader("X-Emby-Token", j.apiKey)
-		req.SetQueryParam("api_key", j.apiKey) // 兼容老版本
+		req.SetQueryParam("api_key", j.apiKey)
 	}
 
 	resp, err := req.Get(url)
