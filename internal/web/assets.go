@@ -63,6 +63,10 @@ const html = `
                     <el-form-item label="签名 Salt">
                         <el-input v-model="form.alist_sign_salt" placeholder="Alist 后台 Token 页面查看"></el-input>
                     </el-form-item>
+                    <el-form-item label="启用 UA 透传">
+                        <el-switch v-model="form.alist_ua_passthrough"></el-switch>
+                        <span style="font-size:12px;color:#999;margin-left:10px">将播放器UA传给Alist，适配115等网盘</span>
+                    </el-form-item>
                     
                     <el-divider content-position="left">增强功能</el-divider>
                     
