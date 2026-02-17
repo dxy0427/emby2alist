@@ -63,6 +63,14 @@ const html = `
                     <el-form-item label="签名 Salt">
                         <el-input v-model="form.alist_sign_salt" placeholder="Alist 后台 Token 页面查看"></el-input>
                     </el-form-item>
+                    
+                    <el-divider content-position="left">增强功能</el-divider>
+                    
+                    <el-form-item label="解析 Strm 重定向">
+                         <el-switch v-model="form.resolve_strm_links"></el-switch>
+                         <span style="font-size:12px;color:#999;margin-left:10px">自动请求 Strm 内的链接获取真实地址 (解决内网 127.0.0.1 问题)</span>
+                    </el-form-item>
+                    
                     <el-form-item label="禁用转码">
                          <el-switch v-model="form.disable_transcode"></el-switch>
                          <span style="font-size:12px;color:#999;margin-left:10px">强制客户端直连，不走转码</span>
@@ -166,4 +174,3 @@ const html = `
 </script>
 </body>
 </html>
-`
