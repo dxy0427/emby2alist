@@ -14,22 +14,24 @@ import (
 )
 
 type Client struct {
-	client     *resty.Client
-	host       string
-	token      string
-	publicHost string
-	signEnable bool
-	signSalt   string
+	client        *resty.Client
+	host          string
+	token         string
+	publicHost    string
+	signEnable    bool
+	signSalt      string
+	uaPassthrough bool
 }
 
-func NewClient(host, token, publicHost string, signEnable bool, signSalt string) *Client {
+func NewClient(host, token, publicHost string, signEnable bool, signSalt string, uaPassthrough bool) *Client {
 	return &Client{
-		client:     resty.New().SetTimeout(10 * time.Second),
-		host:       strings.TrimRight(host, "/"),
-		token:      token,
-		publicHost: strings.TrimRight(publicHost, "/"),
-		signEnable: signEnable,
-		signSalt:   signSalt,
+		client:        resty.New().SetTimeout(10 * time.Second).SetRetryCount(2), // 增加重试
+		host:          strings.TrimRight(host, "/"),
+		token:         token,
+		publicHost:    strings.TrimRight(publicHost, "/"),
+		signEnable:    signEnable,
+		signSalt:      signSalt,
+		uaPassthrough: uaPassthrough,
 	}
 }
 
@@ -43,7 +45,8 @@ type fsGetResponse struct {
 }
 
 // GetFsGet 调用 Alist /api/fs/get 获取直链
-func (a *Client) GetFsGet(filePath string) (string, error) {
+// userAgent: 客户端的 UA，如果开启透传则会发给 Alist
+func (a *Client) GetFsGet(filePath string, userAgent string) (string, error) {
 	if !strings.HasPrefix(filePath, "/") {
 		filePath = "/" + filePath
 	}
@@ -53,11 +56,18 @@ func (a *Client) GetFsGet(filePath string) (string, error) {
 		"password": "",
 	}
 
-	resp, err := a.client.R().
+	req := a.client.R().
 		SetHeader("Authorization", a.token).
 		SetHeader("Content-Type", "application/json").
-		SetBody(reqBody).
-		Post(a.host + "/api/fs/get")
+		SetBody(reqBody)
+
+	// 如果开启透传，带上客户端 UA
+	if a.uaPassthrough && userAgent != "" {
+		req.SetHeader("User-Agent", userAgent)
+		logrus.Debugf("Alist Request with UA: %s", userAgent)
+	}
+
+	resp, err := req.Post(a.host + "/api/fs/get")
 
 	if err != nil {
 		return "", err
@@ -69,7 +79,8 @@ func (a *Client) GetFsGet(filePath string) (string, error) {
 	}
 
 	if result.Code != 200 {
-		return "", fmt.Errorf("alist api error: %s", result.Message)
+		// 403 可能意味着 Token 错误
+		return "", fmt.Errorf("alist api error: %s (code %d)", result.Message, result.Code)
 	}
 
 	rawUrl := result.Data.RawURL
@@ -79,7 +90,6 @@ func (a *Client) GetFsGet(filePath string) (string, error) {
 
 	// 替换公网地址
 	if a.publicHost != "" {
-		// 简单替换：如果 rawUrl 包含内网 Alist 地址，替换为公网
 		if strings.HasPrefix(rawUrl, a.host) {
 			rawUrl = strings.Replace(rawUrl, a.host, a.publicHost, 1)
 		}
@@ -93,7 +103,6 @@ func (a *Client) GetFsGet(filePath string) (string, error) {
 	return rawUrl, nil
 }
 
-// signUrl 实现 Alist 的 HMAC 签名
 func (a *Client) signUrl(rawUrl string, expireHours int) string {
 	if a.signSalt == "" {
 		return rawUrl
@@ -101,12 +110,10 @@ func (a *Client) signUrl(rawUrl string, expireHours int) string {
 	
 	u, err := url.Parse(rawUrl)
 	if err != nil {
-		logrus.Warnf("Sign URL Parse Error: %v", err)
 		return rawUrl
 	}
 
 	path := u.Path
-	// 需要 decode，因为 Alist 签名是对原始字符签名的
 	path, _ = url.QueryUnescape(path)
 	
 	timeVal := int64(0)
@@ -114,19 +121,15 @@ func (a *Client) signUrl(rawUrl string, expireHours int) string {
 		timeVal = time.Now().Add(time.Duration(expireHours) * time.Hour).Unix()
 	}
 	
-	// 构造签名源数据: path:time
 	signData := fmt.Sprintf("%s:%d", path, timeVal)
 	
-	// HMAC-SHA256
 	h := hmac.New(sha256.New, []byte(a.signSalt))
 	h.Write([]byte(signData))
 	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
 	
-	// URL Safe 替换
 	signature = strings.ReplaceAll(signature, "+", "-")
 	signature = strings.ReplaceAll(signature, "/", "_")
 	
-	// 最终格式: sign=signature:time
 	finalSign := fmt.Sprintf("%s:%d", signature, timeVal)
 
 	q := u.Query()
