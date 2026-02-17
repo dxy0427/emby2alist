@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"compress/gzip"
+ "fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
