@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"compress/gzip"
- "fmt"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -15,12 +15,15 @@ import (
 	"strings"
 )
 
-// ReverseProxy 执行反向代理
-// modifyResponse: 是否需要拦截并修改响应体 (用于 PlaybackInfo)
 func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
-	remote, err := url.Parse(s.cfg.EmbyHost)
+	hostUrl := s.cfg.Server.Addr
+	if !strings.HasPrefix(hostUrl, "http://") && !strings.HasPrefix(hostUrl, "https://") {
+		hostUrl = "http://" + hostUrl
+	}
+
+	remote, err := url.Parse(hostUrl)
 	if err != nil {
-		c.String(500, "Config Error")
+		c.String(500, "Config Error: Invalid Server Addr")
 		return
 	}
 
@@ -34,7 +37,6 @@ func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
 		req.URL.Path = c.Request.URL.Path
 		req.URL.RawQuery = c.Request.URL.RawQuery
 		
-		// 移除 Accept-Encoding 避免 Emby 返回 gzip，方便我们修改 JSON
 		if modifyResponse {
 			req.Header.Del("Accept-Encoding")
 		}
@@ -46,14 +48,12 @@ func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
 				return nil
 			}
 
-			// 读取原始 Body
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return err
 			}
 			_ = resp.Body.Close()
 
-			// 处理 Gzip (万一上游强制 gzip)
 			var respBody []byte
 			if resp.Header.Get("Content-Encoding") == "gzip" {
 				reader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
@@ -67,11 +67,9 @@ func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
 				respBody = bodyBytes
 			}
 
-			// 执行修改
 			newBody := s.modifyPlaybackInfo(respBody)
 
-			// 重新设置 Body
-			resp.Header.Del("Content-Encoding") // 不再压缩
+			resp.Header.Del("Content-Encoding")
 			resp.Header.Del("Content-Length")
 			resp.Body = io.NopCloser(bytes.NewReader(newBody))
 			return nil
@@ -82,15 +80,14 @@ func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
 }
 
 func (s *Server) modifyPlaybackInfo(body []byte) []byte {
-	// 如果配置未开启禁用转码，直接返回
-	if !s.cfg.DisableTranscode {
+	// 如果 HTTP 和 Alist 模式都禁用了转码，则全局禁用
+	disableTranscode := s.cfg.HttpStrm.DisableTranscode || s.cfg.AlistStrm.DisableTranscode
+	if !disableTranscode {
 		return body
 	}
 
 	jsonStr := string(body)
 	
-	// 修改 MediaSources 数组中的每一个 Source
-	// 强制开启 DirectPlay，关闭 Transcoding
 	sources := gjson.Get(jsonStr, "MediaSources").Array()
 	for i := range sources {
 		prefix := fmt.Sprintf("MediaSources.%d", i)
@@ -98,7 +95,6 @@ func (s *Server) modifyPlaybackInfo(body []byte) []byte {
 		jsonStr, _ = sjson.Set(jsonStr, prefix+".SupportsDirectStream", true)
 		jsonStr, _ = sjson.Set(jsonStr, prefix+".SupportsTranscoding", false)
 
-		// 标记 DirectStreamUrl，防止 Emby 客户端无限重试
 		dUrl := gjson.Get(jsonStr, prefix+".DirectStreamUrl").String()
 		if dUrl != "" {
 			sep := "?"
@@ -110,6 +106,5 @@ func (s *Server) modifyPlaybackInfo(body []byte) []byte {
 		}
 	}
 	
-	logrus.Debug("Modified PlaybackInfo: Forced DirectPlay")
 	return []byte(jsonStr)
 }
