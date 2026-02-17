@@ -8,7 +8,7 @@ import (
 
 type Config struct {
 	ServerPort       int           `yaml:"server_port" json:"server_port"`
-	BackendType      string        `yaml:"backend_type" json:"backend_type"` // emby 或 jellyfin
+	BackendType      string        `yaml:"backend_type" json:"backend_type"`
 	EmbyHost         string        `yaml:"emby_host" json:"emby_host"`
 	EmbyApiKey       string        `yaml:"emby_api_key" json:"emby_api_key"`
 	AlistHost        string        `yaml:"alist_host" json:"alist_host"`
@@ -16,11 +16,12 @@ type Config struct {
 	AlistToken       string        `yaml:"alist_token" json:"alist_token"`
 	AlistSignEnable  bool          `yaml:"alist_sign_enable" json:"alist_sign_enable"`
 	AlistSignSalt    string        `yaml:"alist_sign_salt" json:"alist_sign_salt"`
+	AlistUaPassthrough bool        `yaml:"alist_ua_passthrough" json:"alist_ua_passthrough"` // 新增：UA透传
 	MountPaths       []string      `yaml:"mount_paths" json:"mount_paths"`
 	RouteRules       []RouteRule   `yaml:"route_rules" json:"route_rules"`
 	PathMappings     []PathMapping `yaml:"path_mappings" json:"path_mappings"`
 	DisableTranscode bool          `yaml:"disable_transcode" json:"disable_transcode"`
-	ResolveStrmLinks bool          `yaml:"resolve_strm_links" json:"resolve_strm_links"` // 新增：是否解析 Strm 302
+	ResolveStrmLinks bool          `yaml:"resolve_strm_links" json:"resolve_strm_links"`
 	mu               sync.RWMutex  `yaml:"-" json:"-"`
 }
 
@@ -47,9 +48,10 @@ func DefaultConfig() *Config {
 		AlistPublicHost:  "",
 		AlistToken:       "",
 		AlistSignEnable:  false,
+		AlistUaPassthrough: false, // 默认关闭
 		MountPaths:       []string{"/mnt"},
 		DisableTranscode: true,
-		ResolveStrmLinks: false, // 默认关闭
+		ResolveStrmLinks: false,
 		RouteRules:       []RouteRule{},
 		PathMappings:     []PathMapping{},
 	}
@@ -96,6 +98,7 @@ func (c *Config) Update(newCfg *Config) {
 	c.AlistToken = newCfg.AlistToken
 	c.AlistSignEnable = newCfg.AlistSignEnable
 	c.AlistSignSalt = newCfg.AlistSignSalt
+	c.AlistUaPassthrough = newCfg.AlistUaPassthrough // 更新
 	c.MountPaths = newCfg.MountPaths
 	c.RouteRules = newCfg.RouteRules
 	c.PathMappings = newCfg.PathMappings
