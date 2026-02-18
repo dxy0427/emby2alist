@@ -24,8 +24,15 @@ func NewServer(cfg *config.Config) *Server {
 	// 初始化缓存，默认过期时间由配置决定，清理周期设为 10 分钟
 	c := cache.New(cfg.Cache.HttpStrmTTL, 10*time.Minute)
 
+	// 创建自定义 GIN 引擎，禁用默认日志
+	engine := gin.New()
+	
+	// 使用自定义日志格式
+	engine.Use(gin.LoggerWithFormatter(customGinLogFormat))
+	engine.Use(gin.Recovery())
+
 	s := &Server{
-		engine: gin.Default(),
+		engine: engine,
 		cfg:    cfg,
 		cache:  c,
 		httpClient: &http.Client{
@@ -63,7 +70,7 @@ func (s *Server) Run(addr string) error {
 func (s *Server) mainHandler(c *gin.Context) {
 	// 1. PlaybackInfo 拦截
 	if strings.Contains(c.Request.URL.Path, "/PlaybackInfo") {
-		logrus.Infof("拦截 PlaybackInfo: %s", c.ClientIP())
+		logrus.Infof("拦截 PlaybackInfo 请求，客户端 IP: %s", c.ClientIP())
 		s.ReverseProxy(c, true)
 		return
 	}
@@ -83,11 +90,11 @@ func (s *Server) mainHandler(c *gin.Context) {
 		mediaSourceId = c.Query("mediaSourceId")
 	}
 
-	logrus.Infof("播放请求: ItemID=%s SourceID=%s", itemId, mediaSourceId)
+	logrus.Infof("接收到播放请求，ItemID: %s, SourceID: %s", itemId, mediaSourceId)
 
 	realPath, err := s.mediaServer.GetItemInfo(itemId, mediaSourceId)
 	if err != nil {
-		logrus.Errorf("获取路径失败: %v, 回源代理", err)
+		logrus.Errorf("获取路径失败: %v，回源代理", err)
 		s.ReverseProxy(c, false)
 		return
 	}
@@ -101,11 +108,10 @@ func (s *Server) mainHandler(c *gin.Context) {
 		}
 
 		// --- 缓存检查 ---
-		// 缓存键使用原始路径即可，因为后续处理是固定的
 		cacheKey := "strm:" + realPath
 		if s.cfg.Cache.Enable {
 			if cachedURL, found := s.cache.Get(cacheKey); found {
-				logrus.Infof("[Cache] 命中缓存，直接跳转: %s", cachedURL.(string))
+				logrus.Infof("缓存命中，直接跳转: %s", cachedURL.(string))
 				c.Redirect(http.StatusFound, cachedURL.(string))
 				return
 			}
@@ -122,7 +128,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 
 		// 3.2 自动解析 302
 		if s.cfg.HttpStrm.ResolveStrmLinks {
-			logrus.Infof("解析 Strm 链接: %s", targetPath)
+			logrus.Infof("开始解析 Strm 链接: %s", targetPath)
 			req, _ := http.NewRequest("GET", targetPath, nil)
 			
 			// UA 透传
@@ -144,7 +150,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 						// --- 写入缓存 ---
 						if s.cfg.Cache.Enable {
 							s.cache.Set(cacheKey, targetPath, cache.DefaultExpiration)
-							logrus.Infof("[Cache] 已缓存直链，TTL: %s", s.cfg.Cache.HttpStrmTTL)
+							logrus.Infof("已缓存直链，TTL: %s", s.cfg.Cache.HttpStrmTTL)
 						}
 						// --------------
 					}
@@ -153,13 +159,13 @@ func (s *Server) mainHandler(c *gin.Context) {
 				logrus.Warnf("解析失败: %v", err)
 			}
 		} else {
-			// 如果没有开启解析302，但开启了缓存，也缓存替换后的路径（尽管此时开销较小，但仍能节省正则/字符串替换开销）
+			// 如果没有开启解析302，但开启了缓存，也缓存替换后的路径
 			if s.cfg.Cache.Enable {
 				s.cache.Set(cacheKey, targetPath, cache.DefaultExpiration)
 			}
 		}
 
-		logrus.Infof("[HttpStrm] 跳转: %s", targetPath)
+		logrus.Infof("跳转到直链: %s", targetPath)
 		c.Redirect(http.StatusFound, targetPath)
 		return
 	}
