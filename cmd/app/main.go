@@ -31,9 +31,15 @@ func main() {
 	logrus.Infof("Server: %s (%s)", cfg.Server.Addr, cfg.Server.Type)
 	logrus.Infof("HttpStrm Enable: %v", cfg.HttpStrm.Enable)
 	logrus.Infof("Auto Resolve 302: %v", cfg.HttpStrm.ResolveStrmLinks)
+	
+	// 打印新功能状态
 	logrus.Infof("Cache Enable: %v (TTL: %s)", cfg.Cache.Enable, cfg.Cache.HttpStrmTTL)
-	logrus.Infof("Client Filter: %v (Mode: %s)", cfg.Client.Enable, cfg.Client.Mode)
-
+	if cfg.Client.Enable {
+		logrus.Infof("Client Filter: ON (Mode: %s, Count: %d)", cfg.Client.Mode, len(cfg.Client.List))
+	} else {
+		logrus.Info("Client Filter: OFF")
+	}
+	
 	if err := srv.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {
 		logrus.Fatalf("Start Error: %v", err)
 	}
