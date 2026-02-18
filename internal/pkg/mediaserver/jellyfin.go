@@ -22,7 +22,7 @@ func NewJellyfinClient(host, apiKey string) *JellyfinClient {
 	}
 }
 
-func (j *JellyfinClient) GetItemInfo(itemId string, mediaSourceId string) (string, *ItemInfo, error) {
+func (j *JellyfinClient) GetItemInfo(itemId string, mediaSourceId string) (string, error) {
 	url := fmt.Sprintf("%s/Items", j.host)
 	req := j.client.R().
 		SetQueryParam("Ids", itemId).
@@ -36,15 +36,15 @@ func (j *JellyfinClient) GetItemInfo(itemId string, mediaSourceId string) (strin
 
 	resp, err := req.Get(url)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 	if resp.StatusCode() != 200 {
-		return "", nil, fmt.Errorf("jellyfin api error: %d", resp.StatusCode())
+		return "", fmt.Errorf("jellyfin api error: %d", resp.StatusCode())
 	}
 
 	var res commonItemsResponse
 	if err := json.Unmarshal(resp.Body(), &res); err != nil {
-		return "", nil, err
+		return "", err
 	}
 
 	return commonGetItemPath(res, mediaSourceId)
