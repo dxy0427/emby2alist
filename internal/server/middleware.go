@@ -47,7 +47,7 @@ func ClientFilter(cfg *config.ClientFilterConf) gin.HandlerFunc {
 		}
 
 		if !allowed {
-			logrus.Infof("[ClientFilter] 拦截请求 UA: %s", userAgent)
+			logrus.Infof("客户端过滤拦截，User-Agent: %s", userAgent)
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
