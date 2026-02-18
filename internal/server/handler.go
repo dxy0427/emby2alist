@@ -3,10 +3,13 @@ package server
 import (
 	"emby2alist/internal/config"
 	"emby2alist/internal/pkg/mediaserver"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -21,16 +24,19 @@ type Server struct {
 }
 
 func NewServer(cfg *config.Config) *Server {
+	// 初始化缓存，默认过期时间由配置决定，清理周期设为 10 分钟
+	c := cache.New(cfg.Cache.HttpStrmTTL, 10*time.Minute)
+
 	s := &Server{
 		engine: gin.Default(),
 		cfg:    cfg,
+		cache:  c,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-			CheckRedirect: func(req *http.Request, via []http.Request) error {
+			Timeout: 10 * time.Second, // 稍微增加超时时间以适应重定向解析
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
 		},
-		cache: cache.New(cfg.Cache.HttpStrmTTL, 10*time.Minute),
 	}
 	s.reloadClients()
 	s.setupRoutes()
@@ -42,10 +48,14 @@ func (s *Server) reloadClients() {
 	if !strings.HasPrefix(embyHost, "http://") && !strings.HasPrefix(embyHost, "https://") {
 		embyHost = "http://" + embyHost
 	}
+
 	s.mediaServer = mediaserver.NewClient(s.cfg.Server.Type, embyHost, s.cfg.Server.Auth)
 }
 
 func (s *Server) setupRoutes() {
+	// 注册客户端过滤器中间件
+	s.engine.Use(ClientFilter(&s.cfg.Client))
+	
 	s.engine.NoRoute(s.mainHandler)
 }
 
@@ -54,27 +64,6 @@ func (s *Server) Run(addr string) error {
 }
 
 func (s *Server) mainHandler(c *gin.Context) {
-	// 0. 客户端过滤器
-	if s.cfg.Client.Enable {
-		ua := strings.ToLower(c.Request.UserAgent())
-		matched := false
-		for _, v := range s.cfg.Client.List {
-			if strings.Contains(ua, strings.ToLower(v)) {
-				matched = true
-				break
-			}
-		}
-
-		isWhitelist := strings.EqualFold(s.cfg.Client.Mode, "Whitelist")
-		// 白名单模式：匹配成功放行，未匹配拒绝
-		// 黑名单模式：匹配成功拒绝，未匹配放行
-		if (isWhitelist && !matched) || (!isWhitelist && matched) {
-			logrus.Warnf("客户端被拦截: IP=%s UA=%s Mode=%s", c.ClientIP(), c.Request.UserAgent(), s.cfg.Client.Mode)
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-	}
-
 	// 1. PlaybackInfo 拦截
 	if strings.Contains(c.Request.URL.Path, "/PlaybackInfo") {
 		logrus.Infof("拦截 PlaybackInfo: %s", c.ClientIP())
@@ -85,6 +74,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 	// 2. 识别流媒体请求
 	path := c.Request.URL.Path
 	isStream := strings.Contains(path, "/stream") || strings.Contains(path, "/Download") || strings.Contains(path, "/original")
+
 	if !isStream {
 		s.ReverseProxy(c, false)
 		return
@@ -95,6 +85,7 @@ func (s *Server) mainHandler(c *gin.Context) {
 	if mediaSourceId == "" {
 		mediaSourceId = c.Query("mediaSourceId")
 	}
+
 	logrus.Infof("播放请求: ItemID=%s SourceID=%s", itemId, mediaSourceId)
 
 	realPath, err := s.mediaServer.GetItemInfo(itemId, mediaSourceId)
@@ -112,8 +103,19 @@ func (s *Server) mainHandler(c *gin.Context) {
 			return
 		}
 
-		targetPath := realPath
+		// --- 缓存检查 ---
+		// 缓存键使用原始路径即可，因为后续处理是固定的
+		cacheKey := "strm:" + realPath
+		if s.cfg.Cache.Enable {
+			if cachedURL, found := s.cache.Get(cacheKey); found {
+				logrus.Infof("[Cache] 命中缓存，直接跳转: %s", cachedURL.(string))
+				c.Redirect(http.StatusFound, cachedURL.(string))
+				return
+			}
+		}
+		// ---------------
 
+		targetPath := realPath
 		// 3.1 路径替换
 		for _, m := range s.cfg.HttpStrm.PathMappings {
 			if m.Old != "" {
@@ -121,22 +123,11 @@ func (s *Server) mainHandler(c *gin.Context) {
 			}
 		}
 
-		// 3.2 自动解析 302 (带缓存)
+		// 3.2 自动解析 302
 		if s.cfg.HttpStrm.ResolveStrmLinks {
-			cacheKey := targetPath
-
-			// 尝试从缓存获取
-			if s.cfg.Cache.Enable {
-				if cachedUrl, found := s.cache.Get(cacheKey); found {
-					logrus.Infof("[Cache Hit] 解析成功: %s", cachedUrl)
-					c.Redirect(http.StatusFound, cachedUrl.(string))
-					return
-				}
-			}
-
 			logrus.Infof("解析 Strm 链接: %s", targetPath)
 			req, _ := http.NewRequest("GET", targetPath, nil)
-
+			
 			// UA 透传
 			if s.cfg.HttpStrm.UaPassthrough {
 				req.Header.Set("User-Agent", c.Request.UserAgent())
@@ -151,15 +142,23 @@ func (s *Server) mainHandler(c *gin.Context) {
 					loc := resp.Header.Get("Location")
 					if loc != "" {
 						logrus.Infof("解析成功: %s", loc)
-						// 写入缓存
-						if s.cfg.Cache.Enable {
-							s.cache.Set(cacheKey, loc, cache.DefaultExpiration)
-						}
 						targetPath = loc
+						
+						// --- 写入缓存 ---
+						if s.cfg.Cache.Enable {
+							s.cache.Set(cacheKey, targetPath, cache.DefaultExpiration)
+							logrus.Infof("[Cache] 已缓存直链，TTL: %s", s.cfg.Cache.HttpStrmTTL)
+						}
+						// --------------
 					}
 				}
 			} else {
 				logrus.Warnf("解析失败: %v", err)
+			}
+		} else {
+			// 如果没有开启解析302，但开启了缓存，也缓存替换后的路径（尽管此时开销较小，但仍能节省正则/字符串替换开销）
+			if s.cfg.Cache.Enable {
+				s.cache.Set(cacheKey, targetPath, cache.DefaultExpiration)
 			}
 		}
 
