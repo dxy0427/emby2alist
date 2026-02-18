@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/goccy/go-yaml"
 	"os"
+	"time"
 )
 
 type Config struct {
@@ -20,11 +21,11 @@ type ServerConf struct {
 }
 
 type HttpStrmConf struct {
-	Enable           bool          `yaml:"enable"`
-	DisableTranscode bool          `yaml:"disable_transcode"`
-	ResolveStrmLinks bool          `yaml:"resolve_strm_links"`
-	UaPassthrough    bool          `yaml:"alist_ua_passthrough"`
-	PathMappings     []PathMapping `yaml:"path_mappings"`
+	Enable          bool          `yaml:"enable"`
+	DisableTranscode bool         `yaml:"disable_transcode"`
+	ResolveStrmLinks bool         `yaml:"resolve_strm_links"`
+	UaPassthrough   bool          `yaml:"alist_ua_passthrough"`
+	PathMappings    []PathMapping `yaml:"path_mappings"`
 }
 
 type PathMapping struct {
@@ -33,13 +34,13 @@ type PathMapping struct {
 }
 
 type CacheConf struct {
-	Enable      bool   `yaml:"enable"`
-	HttpStrmTTL string `yaml:"http_strm_ttl"`
+	Enable      bool          `yaml:"enable"`
+	HttpStrmTTL time.Duration `yaml:"http_strm_ttl"`
 }
 
 type ClientConf struct {
 	Enable bool     `yaml:"enable"`
-	Mode   string   `yaml:"mode"` // BlackList or WhiteList
+	Mode   string   `yaml:"mode"` // Whitelist or Blacklist
 	List   []string `yaml:"list"`
 }
 
@@ -55,9 +56,8 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 8091
 	}
-	// 默认值处理
-	if cfg.Cache.HttpStrmTTL == "" {
-		cfg.Cache.HttpStrmTTL = "10m"
+	if cfg.Cache.HttpStrmTTL == 0 {
+		cfg.Cache.HttpStrmTTL = 10 * time.Minute
 	}
 	return &cfg, nil
 }
