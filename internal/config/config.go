@@ -12,6 +12,7 @@ type Config struct {
 	Cache    CacheConf        `yaml:"cache"`
 	Client   ClientFilterConf `yaml:"client"`
 	HttpStrm HttpStrmConf     `yaml:"http_strm"`
+	Logging  LoggingConf      `yaml:"logging"`
 }
 
 type ServerConf struct {
@@ -42,6 +43,10 @@ type HttpStrmConf struct {
 type PathMapping struct {
 	Old string `yaml:"old"`
 	New string `yaml:"new"`
+}
+
+type LoggingConf struct {
+	Verbose bool `yaml:"verbose"` // 是否启用详细日志（包括所有 HTTP 请求）
 }
 
 func LoadConfig(path string) (*Config, error) {
