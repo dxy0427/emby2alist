@@ -26,11 +26,16 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	srv := server.NewServer(cfg)
 
-	logrus.Info("=== Emby2Alist Lite (HttpStrm Only) ===")
+	logrus.Info("=== Emby2Alist Lite (Enhanced) ===")
 	logrus.Infof("Port: %d", cfg.Port)
 	logrus.Infof("Server: %s (%s)", cfg.Server.Addr, cfg.Server.Type)
-	logrus.Infof("HttpStrm Enable: %v", cfg.HttpStrm.Enable)
-	logrus.Infof("Auto Resolve 302: %v", cfg.HttpStrm.ResolveStrmLinks)
+	logrus.Infof("HttpStrm: %v (Resolve: %v)", cfg.HttpStrm.Enable, cfg.HttpStrm.ResolveStrmLinks)
+	logrus.Infof("Cache: %v (TTL: %s)", cfg.Cache.Enable, cfg.Cache.HttpStrmTTL)
+	if cfg.Client.Enable {
+		logrus.Infof("Client Filter: Enable (%s)", cfg.Client.Mode)
+	} else {
+		logrus.Info("Client Filter: Disable")
+	}
 	
 	if err := srv.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {
 		logrus.Fatalf("Start Error: %v", err)
