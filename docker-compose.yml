@@ -1,6 +1,8 @@
 services:
   emby2alist:
-    build: .
+    build:
+      context: .
+      network: host
     image: emby2alist:latest
     container_name: emby2alist
     restart: unless-stopped
