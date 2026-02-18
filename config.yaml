@@ -1,25 +1,15 @@
 port: 8091
 
 server:
-  type: Emby
-  addr: http://localhost:8096
-  auth: "YOUR_EMBY_API_KEY"
+  type: Emby                        # Emby 或 Jellyfin
+  addr: http://172.17.0.1:8096      # 媒体服务器地址
+  auth: "YOUR_API_KEY_HERE"         # API Key
 
 http_strm:
-  enable: true
-  disable_transcode: true
-  resolve_strm_links: true  # 开启后自动解析 127.0.0.1
-  path_mappings:
+  enable: true                      # 开启
+  disable_transcode: true           # 禁用转码(修改PlaybackInfo)
+  resolve_strm_links: true          # 自动解析 302 (解决内网链接问题)
+  alist_ua_passthrough: false       # 解析链接时是否携带客户端UA
+  path_mappings:                    # 地址替换规则
     - old: "http://127.0.0.1:12398"
       new: "https://openlist.com"
-
-alist_strm:
-  enable: true
-  disable_transcode: true
-  alist_host: "http://127.0.0.1:5244"
-  alist_public_host: ""
-  alist_token: "YOUR_ALIST_TOKEN"
-  alist_ua_passthrough: false
-  path_mappings:
-    - old: "/mnt/aliyun"
-      new: "/aliyun"
