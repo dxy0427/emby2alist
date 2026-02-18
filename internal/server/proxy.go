@@ -79,9 +79,7 @@ func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
 }
 
 func (s *Server) modifyPlaybackInfo(body []byte) []byte {
-	// 如果 HTTP 和 Alist 模式都禁用了转码，则全局禁用
-	disableTranscode := s.cfg.HttpStrm.DisableTranscode || s.cfg.AlistStrm.DisableTranscode
-	if !disableTranscode {
+	if !s.cfg.HttpStrm.DisableTranscode {
 		return body
 	}
 
