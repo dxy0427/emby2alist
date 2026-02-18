@@ -6,19 +6,7 @@ import (
 )
 
 type MediaServerClient interface {
-	GetItemInfo(itemId string, mediaSourceId string) (string, *ItemInfo, error)
-}
-
-type ItemInfo struct {
-	Name         string
-	Path         string
-	MediaSources []MediaSource
-}
-
-type MediaSource struct {
-	Id       string
-	Path     string
-	Protocol string
+	GetItemInfo(itemId string, mediaSourceId string) (string, error)
 }
 
 func NewClient(backendType, host, apiKey string) MediaServerClient {
@@ -31,35 +19,33 @@ func NewClient(backendType, host, apiKey string) MediaServerClient {
 
 type commonItemsResponse struct {
 	Items []struct {
-		Name         string        `json:"Name"`
-		Path         string        `json:"Path"`
-		MediaSources []MediaSource `json:"MediaSources"`
+		Path         string `json:"Path"`
+		MediaSources []struct {
+			Id       string `json:"Id"`
+			Path     string `json:"Path"`
+			Protocol string `json:"Protocol"`
+		} `json:"MediaSources"`
 	} `json:"Items"`
 }
 
-func commonGetItemPath(res commonItemsResponse, mediaSourceId string) (string, *ItemInfo, error) {
+func commonGetItemPath(res commonItemsResponse, mediaSourceId string) (string, error) {
 	if len(res.Items) == 0 {
-		return "", nil, fmt.Errorf("item not found")
+		return "", fmt.Errorf("item not found")
 	}
 
 	rawItem := res.Items[0]
-	info := &ItemInfo{
-		Name:         rawItem.Name,
-		Path:         rawItem.Path,
-		MediaSources: rawItem.MediaSources,
-	}
-
 	targetPath := rawItem.Path
+
 	if len(rawItem.MediaSources) > 0 {
 		for _, ms := range rawItem.MediaSources {
 			if mediaSourceId == "" || ms.Id == mediaSourceId {
 				targetPath = ms.Path
 				if ms.Protocol == "Http" && ms.Path != "" {
-					return ms.Path, info, nil
+					return ms.Path, nil
 				}
 				break
 			}
 		}
 	}
-	return targetPath, info, nil
+	return targetPath, nil
 }
