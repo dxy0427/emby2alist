@@ -12,6 +12,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
@@ -27,6 +28,11 @@ func (s *Server) ReverseProxy(c *gin.Context, modifyResponse bool) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(remote)
+	
+	// 设置超时时间，避免 context canceled 错误
+	proxy.Transport = &http.Transport{
+		ResponseHeaderTimeout: 30 * time.Second,
+	}
 
 	proxy.Director = func(req *http.Request) {
 		req.Header = c.Request.Header
