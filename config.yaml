@@ -18,9 +18,12 @@ client:                             # 客户端过滤器
 
 http_strm:
   enable: true                      # 开启
-  disable_transcode: true           # 禁用转码(修改PlaybackInfo)
-  resolve_strm_links: true          # 自动解析 302 (解决内网链接问题)
+  disable_transcode: true           # 禁用转码
+  resolve_strm_links: true          # 自动解析 302 (要服务端可以直接播放，解决Strm内容是局域网地址但是想要在公网之中播放开启了不用配置strm地址替换规则留空即可)
   alist_ua_passthrough: false       # 解析链接时是否携带客户端UA
-  path_mappings:                    # 地址替换规则
+  path_mappings:                    # strm地址替换规则
     - old: "http://127.0.0.1:12398"
       new: "https://openlist.com"
+
+logging:
+  verbose: false                    # 是否启用详细日志
