@@ -13,3 +13,14 @@ http_strm:
   path_mappings:                    # 地址替换规则
     - old: "http://127.0.0.1:12398"
       new: "https://openlist.com"
+
+cache:
+  enable: true                      # 是否启用 HTTPStrm 重定向内存缓存
+  http_strm_ttl: 10m                # 重定向缓存有效期 (例如: 1m, 10m, 1h)
+
+client:
+  enable: true                      # 是否启用客户端过滤器
+  mode: "BlackList"                 # 模式: BlackList (黑名单) 或 WhiteList (白名单)
+  list:                             # 客户端关键词列表 (不区分大小写)
+    - "Fileball"
+    - "Infuse"
