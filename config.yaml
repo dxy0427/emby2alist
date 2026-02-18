@@ -1,26 +1,26 @@
 port: 8091
 
 server:
-  type: Emby                        # Emby 或 Jellyfin
-  addr: http://172.17.0.1:8096      # 媒体服务器地址
-  auth: "YOUR_API_KEY_HERE"         # API Key
+  type: Emby # Emby 或 Jellyfin
+  addr: http://172.17.0.1:8096 # 媒体服务器地址
+  auth: "YOUR_API_KEY_HERE" # API Key
 
 http_strm:
-  enable: true                      # 开启
-  disable_transcode: true           # 禁用转码(修改PlaybackInfo)
-  resolve_strm_links: true          # 自动解析 302 (解决内网链接问题)
-  alist_ua_passthrough: false       # 解析链接时是否携带客户端UA
-  path_mappings:                    # 地址替换规则
+  enable: true # 开启
+  disable_transcode: true # 禁用转码(修改PlaybackInfo)
+  resolve_strm_links: true # 自动解析 302 (解决内网链接问题)
+  alist_ua_passthrough: false # 解析链接时是否携带客户端UA
+  path_mappings: # 地址替换规则
     - old: "http://127.0.0.1:12398"
       new: "https://openlist.com"
 
 cache:
-  enable: true                      # 是否启用 HTTPStrm 重定向内存缓存
-  http_strm_ttl: 10m                # 重定向缓存有效期 (例如: 1m, 10m, 1h)
+  enable: true # 是否启用 HTTPStrm 重定向内存缓存
+  http_strm_ttl: 10m # 重定向缓存有效期
 
-client:
-  enable: true                      # 是否启用客户端过滤器
-  mode: "BlackList"                 # 模式: BlackList (黑名单) 或 WhiteList (白名单)
-  list:                             # 客户端关键词列表 (不区分大小写)
-    - "Fileball"
-    - "Infuse"
+client: # 客户端过滤器
+  enable: false # 是否启用客户端过滤器
+  mode: BlackList # WhileList (白名单) / BlackList (黑名单)
+  list: # 名单列表(包含关键词即可，不区分大小写)
+    - Fileball
+    - Infuse
