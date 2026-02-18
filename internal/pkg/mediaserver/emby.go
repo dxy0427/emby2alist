@@ -22,7 +22,7 @@ func NewEmbyClient(host, apiKey string) *EmbyClient {
 	}
 }
 
-func (e *EmbyClient) GetItemInfo(itemId string, mediaSourceId string) (string, *ItemInfo, error) {
+func (e *EmbyClient) GetItemInfo(itemId string, mediaSourceId string) (string, error) {
 	url := fmt.Sprintf("%s/Items", e.host)
 	req := e.client.R().
 		SetQueryParam("Ids", itemId).
@@ -35,15 +35,15 @@ func (e *EmbyClient) GetItemInfo(itemId string, mediaSourceId string) (string, *
 
 	resp, err := req.Get(url)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 	if resp.StatusCode() != 200 {
-		return "", nil, fmt.Errorf("emby api error: %d", resp.StatusCode())
+		return "", fmt.Errorf("emby api error: %d", resp.StatusCode())
 	}
 
 	var res commonItemsResponse
 	if err := json.Unmarshal(resp.Body(), &res); err != nil {
-		return "", nil, err
+		return "", err
 	}
 
 	return commonGetItemPath(res, mediaSourceId)
