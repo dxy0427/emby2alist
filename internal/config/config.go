@@ -6,33 +6,21 @@ import (
 )
 
 type Config struct {
-	Port   int        `yaml:"port"`
-	Server ServerConf `yaml:"server"`
-	
-	HttpStrm  HttpStrmConf  `yaml:"http_strm"`
-	AlistStrm AlistStrmConf `yaml:"alist_strm"`
+	Port     int          `yaml:"port"`
+	Server   ServerConf   `yaml:"server"`
+	HttpStrm HttpStrmConf `yaml:"http_strm"`
 }
 
 type ServerConf struct {
-	Type string `yaml:"type"` // Emby / Jellyfin
+	Type string `yaml:"type"`
 	Addr string `yaml:"addr"`
-	Auth string `yaml:"auth"` // ApiKey
+	Auth string `yaml:"auth"`
 }
 
 type HttpStrmConf struct {
-	Enable             bool          `yaml:"enable"`
-	DisableTranscode   bool          `yaml:"disable_transcode"`
-	ResolveStrmLinks   bool          `yaml:"resolve_strm_links"`
-	UaPassthrough      bool          `yaml:"alist_ua_passthrough"` // 其实HTTP模式不需要alist UA，但为了兼容保留
-	PathMappings       []PathMapping `yaml:"path_mappings"`
-}
-
-type AlistStrmConf struct {
 	Enable           bool          `yaml:"enable"`
 	DisableTranscode bool          `yaml:"disable_transcode"`
-	AlistHost        string        `yaml:"alist_host"`
-	AlistPublicHost  string        `yaml:"alist_public_host"`
-	AlistToken       string        `yaml:"alist_token"`
+	ResolveStrmLinks bool          `yaml:"resolve_strm_links"`
 	UaPassthrough    bool          `yaml:"alist_ua_passthrough"`
 	PathMappings     []PathMapping `yaml:"path_mappings"`
 }
@@ -51,7 +39,6 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-	// 默认值
 	if cfg.Port == 0 {
 		cfg.Port = 8091
 	}
