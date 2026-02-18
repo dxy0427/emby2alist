@@ -3,13 +3,10 @@ package server
 import (
 	"emby2alist/internal/config"
 	"emby2alist/internal/pkg/mediaserver"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
