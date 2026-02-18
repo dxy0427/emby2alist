@@ -17,7 +17,7 @@ func main() {
 	logrus.SetOutput(os.Stdout)
 	logrus.SetLevel(logrus.InfoLevel)
 
-	// 必须存在 config.yaml，否则报错退出
+	// 必须存在 config.yaml
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
 		logrus.Fatalf("无法加载 config.yaml: %v", err)
@@ -26,11 +26,11 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	srv := server.NewServer(cfg)
 
-	logrus.Info("=== Emby2Alist Configured Mode ===")
+	logrus.Info("=== Emby2Alist Lite (HttpStrm Only) ===")
 	logrus.Infof("Port: %d", cfg.Port)
 	logrus.Infof("Server: %s (%s)", cfg.Server.Addr, cfg.Server.Type)
-	logrus.Infof("HttpStrm: %v", cfg.HttpStrm.Enable)
-	logrus.Infof("AlistStrm: %v", cfg.AlistStrm.Enable)
+	logrus.Infof("HttpStrm Enable: %v", cfg.HttpStrm.Enable)
+	logrus.Infof("Auto Resolve 302: %v", cfg.HttpStrm.ResolveStrmLinks)
 	
 	if err := srv.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {
 		logrus.Fatalf("Start Error: %v", err)
